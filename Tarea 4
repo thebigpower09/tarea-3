@@ -1,0 +1,123 @@
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using System.Collections.Generic;
+using System.Linq;
+
+var builder = WebApplication.CreateBuilder(args);
+
+// Configuración de Entity Framework Core con una base de datos en memoria
+builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseInMemoryDatabase("ProyectoDB"));
+
+// Registrar controladores
+builder.Services.AddControllers();
+
+var app = builder.Build();
+
+// Configuración de middleware
+app.UseRouting();
+app.UseEndpoints(endpoints =>
+{
+    endpoints.MapControllers();
+});
+
+app.Run();
+
+// =================== Dominio ===================
+
+/// <summary>
+/// Entidad Producto
+/// </summary>
+public class Producto
+{
+    public int Id { get; set; }
+    public string Nombre { get; set; }
+    public decimal Precio { get; set; }
+    public int Stock { get; set; }
+}
+
+/// <summary>
+/// Contexto de datos
+/// </summary>
+public class AppDbContext : DbContext
+{
+    public DbSet<Producto> Productos { get; set; }
+
+    public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
+}
+
+// =================== Controlador ===================
+
+[Route("api/[controller]")]
+[ApiController]
+public class ProductosController : ControllerBase
+{
+    private readonly AppDbContext _context;
+
+    public ProductosController(AppDbContext context)
+    {
+        _context = context;
+    }
+
+    // GET: api/productos
+    [HttpGet]
+    public ActionResult<IEnumerable<Producto>> GetProductos()
+    {
+        return _context.Productos.ToList();
+    }
+
+    // GET: api/productos/{id}
+    [HttpGet("{id}")]
+    public ActionResult<Producto> GetProducto(int id)
+    {
+        var producto = _context.Productos.Find(id);
+        if (producto == null)
+        {
+            return NotFound();
+        }
+        return producto;
+    }
+
+    // POST: api/productos
+    [HttpPost]
+    public ActionResult<Producto> CreateProducto(Producto producto)
+    {
+        _context.Productos.Add(producto);
+        _context.SaveChanges();
+
+        return CreatedAtAction(nameof(GetProducto), new { id = producto.Id }, producto);
+    }
+
+    // PUT: api/productos/{id}
+    [HttpPut("{id}")]
+    public IActionResult UpdateProducto(int id, Producto producto)
+    {
+        if (id != producto.Id)
+        {
+            return BadRequest();
+        }
+
+        _context.Entry(producto).State = EntityState.Modified;
+        _context.SaveChanges();
+
+        return NoContent();
+    }
+
+    // DELETE: api/productos/{id}
+    [HttpDelete("{id}")]
+    public IActionResult DeleteProducto(int id)
+    {
+        var producto = _context.Productos.Find(id);
+        if (producto == null)
+        {
+            return NotFound();
+        }
+
+        _context.Productos.Remove(producto);
+        _context.SaveChanges();
+
+        return NoContent();
+    }
+}
