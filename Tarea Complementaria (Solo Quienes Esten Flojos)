@@ -1,0 +1,196 @@
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
+namespace CrudApiWithBlazor
+{
+    // ========================================
+    // Models
+    // ========================================
+    public class Product
+    {
+        public int Id { get; set; }
+        public string Name { get; set; }
+        public decimal Price { get; set; }
+    }
+
+    // ========================================
+    // Interfaces
+    // ========================================
+    public interface IProductRepository
+    {
+        IEnumerable<Product> GetAll();
+        Product GetById(int id);
+        void Add(Product product);
+        void Update(Product product);
+        void Delete(int id);
+    }
+
+    // ========================================
+    // Repository
+    // ========================================
+    public class ProductRepository : IProductRepository
+    {
+        private readonly List<Product> _products = new();
+
+        public IEnumerable<Product> GetAll() => _products;
+
+        public Product GetById(int id) => _products.FirstOrDefault(p => p.Id == id);
+
+        public void Add(Product product)
+        {
+            product.Id = _products.Count + 1;
+            _products.Add(product);
+        }
+
+        public void Update(Product product)
+        {
+            var existing = GetById(product.Id);
+            if (existing != null)
+            {
+                existing.Name = product.Name;
+                existing.Price = product.Price;
+            }
+        }
+
+        public void Delete(int id)
+        {
+            var product = GetById(id);
+            if (product != null) _products.Remove(product);
+        }
+    }
+
+    // ========================================
+    // API Controller
+    // ========================================
+    [ApiController]
+    [Route("api/products")]
+    public class ProductsController : ControllerBase
+    {
+        private readonly IProductRepository _repository;
+
+        public ProductsController(IProductRepository repository)
+        {
+            _repository = repository;
+        }
+
+        [HttpGet]
+        public IActionResult GetAll() => Ok(_repository.GetAll());
+
+        [HttpGet("{id}")]
+        public IActionResult GetById(int id)
+        {
+            var product = _repository.GetById(id);
+            return product == null ? NotFound() : Ok(product);
+        }
+
+        [HttpPost]
+        public IActionResult Add(Product product)
+        {
+            _repository.Add(product);
+            return CreatedAtAction(nameof(GetById), new { id = product.Id }, product);
+        }
+
+        [HttpPut("{id}")]
+        public IActionResult Update(int id, Product product)
+        {
+            if (id != product.Id) return BadRequest();
+
+            _repository.Update(product);
+            return NoContent();
+        }
+
+        [HttpDelete("{id}")]
+        public IActionResult Delete(int id)
+        {
+            _repository.Delete(id);
+            return NoContent();
+        }
+    }
+
+    // ========================================
+    // Blazor Client (Razor Component Example)
+    // ========================================
+    public class BlazorApp
+    {
+        // Example Razor Component (would be in a .razor file in a real project)
+        public static string IndexPage =
+@"
+@page \"/\"
+@inject HttpClient Http
+
+<h3>Products</h3>
+<button @onclick=""FetchProducts"">Load Products</button>
+<ul>
+    @foreach (var product in products)
+    {
+        <li>@product.Name - $@product.Price</li>
+    }
+</ul>
+
+@code {
+    private List<Product> products = new();
+
+    private async Task FetchProducts()
+    {
+        products = await Http.GetFromJsonAsync<List<Product>>(""api/products"");
+    }
+}
+";
+    }
+
+    // ========================================
+    // Startup
+    // ========================================
+    public class Startup
+    {
+        public void ConfigureServices(IServiceCollection services)
+        {
+            services.AddControllers();
+            services.AddSingleton<IProductRepository, ProductRepository>();
+            services.AddHttpClient(); // For Blazor WebAssembly
+            services.AddRazorComponents(); // For the Blazor example
+        }
+
+        public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
+        {
+            if (env.IsDevelopment())
+            {
+                app.UseDeveloperExceptionPage();
+            }
+
+            app.UseRouting();
+
+            app.UseEndpoints(endpoints =>
+            {
+                endpoints.MapControllers();
+                endpoints.MapFallbackToFile("index.html"); // Fallback for Blazor
+            });
+        }
+    }
+
+    // ========================================
+    // Program Entry
+    // ========================================
+    public class Program
+    {
+        public static void Main(string[] args)
+        {
+            CreateHostBuilder(args).Build().Run();
+        }
+
+        public static IHostBuilder CreateHostBuilder(string[] args) =>
+            Host.CreateDefaultBuilder(args)
+                .ConfigureWebHostDefaults(webBuilder =>
+                {
+                    webBuilder.UseStartup<Startup>();
+                });
+    }
+}
